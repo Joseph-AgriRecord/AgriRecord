@@ -1,0 +1,654 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Wheat Farm Tracker — Session</title>
+<style>
+  :root{--bg:#f6f8fa;--card:#fff;--accent:#2b7cff;--muted:#6b7280}
+  body{font-family:Inter,system-ui,Arial; margin:0;background:var(--bg); color:#111;-webkit-font-smoothing:antialiased}
+  header{background:linear-gradient(90deg,#0b63ff33,#0bffb833);padding:16px;}
+  header h1{margin:0;font-size:24px}
+  .container{max-width:980px;margin:14px auto;padding:15px}
+  .card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 6px 16px rgba(10,20,40,0.06)}
+  label{display:block;font-size:15px;color:var(--muted);margin-top:10px}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .col{flex:1;min-width:140px}
+  input[type=text], input[type=number], select, textarea{
+    width:100%;padding:14px;border-radius:8px;border:1px solid #e6e9ef;margin-top:8px;
+    box-sizing:border-box;font-size:17px;background:#fff
+  }
+  .section-title{font-weight:700;margin-top:6px;margin-bottom:6px}
+  .btn{display:inline-flex;gap:8px;align-items:center;padding:12px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+  .btn-primary{background:var(--accent);color:#fff}
+  .btn-ghost{background:transparent;border:1px solid #e6e9ef}
+  .btn-warn{background:#ffc107;color:#000}
+  .muted{color:var(--muted);font-size:15px}
+  .chem-box{background:#fbfdff;border-radius:8px;padding:15px;margin-top:8px;border:1px dashed #e6eefc}
+  .chem-row{display:flex;gap:8px;margin-top:6px;align-items:center}
+  .small{font-size:13px}
+  .list-item{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:8px;background:#fafbff;margin-top:8px}
+  .actions button{margin-left:8px}
+  .summary{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .chip{background:#f1f6ff;border-radius:8px;padding:8px 10px;font-weight:600}
+  .tabs{display:flex;gap:8px;margin-bottom:8px}
+  .tab{padding:11px 12px;border-radius:8px;cursor:pointer;border:1px solid #e9eef7;background:#fff}
+  .tab.active{background:var(--accent);color:#fff}
+  footer{font-size:15px;color:var(--muted);text-align:center;padding:10px}
+  .small-muted{font-size:15px;color:#6b7280;margin-top:6px}
+  .inline-small{font-size:15px;padding:6px 8px;border-radius:6px}
+  .danger{background:#ff4d4f;color:#fff}
+  .hidden{display:none}
+  .year-row{display:flex;justify-content:space-between;align-items:center;padding:13px;background:#f1f5f9;border-radius:8px;margin-top:8px;cursor:pointer}
+  table{width:100%;border-collapse:collapse;margin-top:8px}
+  th,td{border:1px solid #e6eef7;padding:9px;text-align:left;font-size:15px}
+  pre {white-space:pre-wrap; word-break:break-word; font-family:monospace; font-size:15px; background:#f8fafc;padding:10px;border-radius:6px}
+  @media (max-width:640px){ .row{flex-direction:column} .col{min-width:unset} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌾 Wheat Farm Tracker — local (session)</h1>
+  <div class="muted">Saves to <strong>sessionStorage</strong> (clears when tab closed). Export/import to keep data longer.</div>
+</header>
+
+<div class="container">
+  <div class="card" id="formCard">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>New / Edit Record</strong>
+      <div class="small muted">Status: <span id="recordStatus">Draft</span></div>
+    </div>
+
+    <div style="margin-top:10px" class="row">
+      <div class="col">
+        <label>Year</label>
+        <input id="year" type="number" inputmode="numeric" />
+      </div>
+      <div class="col">
+        <label>Acreage (acres)</label>
+        <input id="acres" type="number" step="0.01" />
+      </div>
+      <div class="col">
+        <label>Notes (optional)</label>
+        <input id="notes" type="text" placeholder="e.g., field name or location" />
+      </div>
+    </div>
+
+    <!-- Land preparation -->
+    <div class="section-title">Land preparation <span class="small-muted">— add multiple items</span></div>
+    <div id="landPrepList"></div>
+    <div style="margin-top:6px">
+      <button id="addLandPrep" class="btn btn-ghost">+ Add Land preparation item</button>
+    </div>
+
+    <!-- Seed -->
+    <div class="section-title">Seed</div>
+    <div id="seedList"></div>
+    <div style="margin-top:6px">
+      <button id="addSeed" class="btn btn-ghost">+ Add Seed entry</button>
+      <div class="small-muted">Seed entries: seed type, price per bag, bags per acre (rate)</div>
+    </div>
+
+    <!-- Fertilizer -->
+    <div class="section-title">Fertilizer</div>
+    <div id="fertList"></div>
+    <div style="margin-top:6px">
+      <button id="addFert" class="btn btn-ghost">+ Add Fertilizer entry</button>
+      <div class="small-muted">Fertilizer entries: type, cost per acre or per bag, rate</div>
+    </div>
+
+    <!-- Labour -->
+    <div class="section-title">Labour</div>
+    <div id="labourList"></div>
+    <div style="margin-top:6px">
+      <button id="addLabour" class="btn btn-ghost">+ Add Labour item</button>
+      <div class="small-muted">e.g., planting labour cost per acre, weeding labour per acre, etc.</div>
+    </div>
+
+    <!-- Weeding chemicals -->
+    <div class="section-title">Weeding Chemicals</div>
+    <div id="weedingList"></div>
+    <div style="margin-top:6px">
+      <button id="addWeed" class="btn btn-ghost">+ Add Weeding Chemical</button>
+      <div class="small-muted">Each chemical has name, price and labour cost per acre</div>
+    </div>
+
+    <!-- Boosting chemicals -->
+    <div class="section-title">Boosting Chemicals</div>
+    <div id="boostList"></div>
+    <div style="margin-top:6px">
+      <button id="addBoost" class="btn btn-ghost">+ Add Boosting Chemical</button>
+      <div class="small-muted">Growth boosters or foliar sprays</div>
+    </div>
+
+    <!-- Harvest & output -->
+    <div class="section-title">Harvest & Output</div>
+    <div class="row">
+      <div class="col">
+        <label>Harvesting cost per acre</label>
+        <input id="harvestCost" type="number" step="0.01" />
+      </div>
+      <div class="col">
+        <label>Bags yield per acre</label>
+        <input id="bagsPerAcre" type="number" step="0.01" />
+      </div>
+      <div class="col">
+        <label>Price per bag</label>
+        <input id="pricePerBag" type="number" step="0.01" />
+      </div>
+    </div>
+
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <button id="saveDraft" class="btn btn-warn">💾 Save Draft</button>
+      <button id="saveFinal" class="btn btn-primary">✅ Save Final</button>
+      <button id="calcBtn" class="btn btn-ghost">📊 Calculate</button>
+      <button id="clearForm" class="btn btn-ghost">Clear Form</button>
+    </div>
+
+    <div id="calcResult" class="summary" style="margin-top:12px"></div>
+  </div>
+<!-- somewhere in your HTML -->
+<div id="mainPage">
+  <!-- your main table or form goes here -->
+</div>
+
+
+<!-- Popup Overlay -->
+<div id="recordModal" style="
+  display:none;
+  position:fixed;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  background:rgba(0,0,0,0.6);
+  z-index:1000;
+  justify-content:center;
+  align-items:center;
+">
+  <div style="
+    background:#fff;
+    padding:20px;
+    max-width:800px;
+    width:90%;
+    max-height:90%;
+    overflow:auto;
+    border-radius:8px;
+  ">
+    <button id="closeModalBtn" class="btn btn-ghost" style="float:right;">✖</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+  <!-- RECORDS -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Records</strong>
+      <div>
+        <button id="showDraftsBtn" class="tab active">Drafts</button>
+        <button id="showFinalBtn" class="tab">Saved</button>
+      </div>
+    </div>
+
+    <div id="listArea" style="margin-top:10px"></div>
+
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button id="exportAll" class="btn btn-primary">Export All (JSON)</button>
+      <input id="importFile" type="file" accept="application/json" style="display:none" />
+      <button id="importBtn" class="btn btn-ghost">Import JSON</button>
+      <button id="clearAll" class="btn danger">Clear All</button>
+    </div>
+
+    <div class="small-muted" style="margin-top:8px">Tip: Export JSON if you want to keep data beyond this browser tab (sessionStorage clears on tab close).</div>
+  </div>
+
+  <footer>Made with ❤️ By John Ngugi</footer>
+</div>
+
+<script>
+/* ===============
+   SESSION STORAGE KEYS
+   =============== */
+/* NOTE: this code uses sessionStorage per your request.
+   If you later prefer persistent storage across browser sessions,
+   replace sessionStorage with localStorage in the helpers below. */
+const S_DRAFTS = 'wheat_session_drafts_v1';
+const S_RECORDS = 'wheat_session_records_v1';
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+function loadDrafts(){ return JSON.parse(localStorage.getItem(S_DRAFTS) || '[]'); }
+function saveDrafts(arr){ localStorage.setItem(S_DRAFTS, JSON.stringify(arr)); }
+function loadRecords(){ return JSON.parse(localStorage.getItem(S_RECORDS) || '[]'); }
+function saveRecords(arr){ localStorage.setItem(S_RECORDS, JSON.stringify(arr)); }
+
+/* ===============
+   DOM refs & model
+   =============== */
+const refs = {
+  year: document.getElementById('year'),
+  acres: document.getElementById('acres'),
+  notes: document.getElementById('notes'),
+  landPrepList: document.getElementById('landPrepList'),
+  seedList: document.getElementById('seedList'),
+  fertList: document.getElementById('fertList'),
+  labourList: document.getElementById('labourList'),
+  weedingList: document.getElementById('weedingList'),
+  boostList: document.getElementById('boostList'),
+  harvestCost: document.getElementById('harvestCost'),
+  bagsPerAcre: document.getElementById('bagsPerAcre'),
+  pricePerBag: document.getElementById('pricePerBag'),
+  recordStatus: document.getElementById('recordStatus'),
+  calcResult: document.getElementById('calcResult'),
+  listArea: document.getElementById('listArea')
+};
+
+let formModel = null; // current record being edited / created
+let showing = 'drafts'; // which tab
+
+function blankRecord(){
+  return {
+    id: uid(),
+    year: (new Date()).getFullYear().toString(),
+    acres: '',
+    notes: '',
+    landPrep: [],      // [{desc, costPerAcre}]
+    seeds: [],         // [{type, pricePerBag, ratePerAcre}]
+    fertilizers: [],   // [{type, costPerAcre, rate}]
+    labour: [],        // [{desc, costPerAcre}]
+    weedingChems: [],  // [{name, price, labour}]
+    boostingChems: [], // [{name, price, labour}]
+    harvestCost: '',
+    bagsPerAcre: '',
+    pricePerBag: '',
+    status: 'draft',
+    createdAt: new Date().toISOString()
+  };
+}
+
+/* ===============
+   Render helpers for repeatable lists
+   =============== */
+function resetForm(){
+  formModel = blankRecord();
+  populateForm();
+}
+
+function populateForm(){
+  refs.year.value = formModel.year || '';
+  refs.acres.value = formModel.acres || '';
+  refs.notes.value = formModel.notes || '';
+  refs.harvestCost.value = formModel.harvestCost || '';
+  refs.bagsPerAcre.value = formModel.bagsPerAcre || '';
+  refs.pricePerBag.value = formModel.pricePerBag || '';
+  refs.recordStatus.textContent = formModel.status === 'final' ? 'Saved' : 'Draft';
+  renderAll();
+}
+
+function readForm(){
+  formModel.year = refs.year.value;
+  formModel.acres = refs.acres.value;
+  formModel.notes = refs.notes.value;
+  formModel.harvestCost = refs.harvestCost.value;
+  formModel.bagsPerAcre = refs.bagsPerAcre.value;
+  formModel.pricePerBag = refs.pricePerBag.value;
+}
+
+/* utility to create input element */
+function makeInput(value, placeholder, oninput, numeric=false){
+  const inp = document.createElement('input');
+  inp.placeholder = placeholder;
+  if(numeric){ inp.type = 'number'; inp.step = '0.01'; }
+  else inp.type = 'text';
+  inp.value = value === undefined ? '' : value;
+  inp.oninput = oninput;
+  return inp;
+}
+
+/* render any repeatable list */
+function renderRepeatable(list, container, schema){
+  container.innerHTML = '';
+  if(list.length === 0){
+    const p = document.createElement('div'); p.className='small-muted'; p.textContent='No items yet.';
+    container.appendChild(p); return;
+  }
+  list.forEach((item, idx) => {
+    const box = document.createElement('div'); box.className = 'chem-box';
+    const row = document.createElement('div'); row.className = 'chem-row';
+    // fields based on schema: [{key, label, numeric}]
+    schema.forEach(f => {
+      const inp = makeInput(item[f.key], f.label, (e) => {
+        // keep exact values typed
+        list[idx][f.key] = e.target.value;
+      }, f.numeric);
+      row.appendChild(inp);
+    });
+    const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
+    const btnRemove = document.createElement('button'); btnRemove.className='btn btn-ghost'; btnRemove.textContent='Remove';
+    btnRemove.onclick = () => {
+      if(!confirm('Remove this item?')) return;
+      list.splice(idx,1); renderAll();
+    };
+    const btnClone = document.createElement('button'); btnClone.className='btn btn-ghost'; btnClone.textContent='Clone';
+    btnClone.onclick = () => {
+      const copy = JSON.parse(JSON.stringify(item)); copy.id = uid(); list.splice(idx+1,0,copy); renderAll();
+    };
+    actions.appendChild(btnRemove); actions.appendChild(btnClone);
+    box.appendChild(row); box.appendChild(actions);
+    container.appendChild(box);
+  });
+}
+
+function renderAll(){
+  renderRepeatable(formModel.landPrep, refs.landPrepList, [{key:'desc',label:'Description',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true}]);
+  renderRepeatable(formModel.seeds, refs.seedList, [{key:'type',label:'Seed type',numeric:false},{key:'pricePerBag',label:'Price per bag',numeric:true},{key:'ratePerAcre',label:'Bags per acre',numeric:true}]);
+  renderRepeatable(formModel.fertilizers, refs.fertList, [{key:'type',label:'Fertilizer type',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true},{key:'rate',label:'Rate',numeric:true}]);
+  renderRepeatable(formModel.labour, refs.labourList, [{key:'desc',label:'Task',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true}]);
+  renderRepeatable(formModel.weedingChems, refs.weedingList, [{key:'name',label:'Name',numeric:false},{key:'price',label:'Price',numeric:true},{key:'labour',label:'Labour cost',numeric:true}]);
+  renderRepeatable(formModel.boostingChems, refs.boostList, [{key:'name',label:'Name',numeric:false},{key:'price',label:'Price',numeric:true},{key:'labour',label:'Labour cost',numeric:true}]);
+}
+
+/* add item button handlers */
+document.getElementById('addLandPrep').onclick = ()=> { formModel.landPrep.push({desc:'', costPerAcre:''}); renderAll(); };
+document.getElementById('addSeed').onclick = ()=> { formModel.seeds.push({type:'', pricePerBag:'', ratePerAcre:''}); renderAll(); };
+document.getElementById('addFert').onclick = ()=> { formModel.fertilizers.push({type:'', costPerAcre:'', rate:''}); renderAll(); };
+document.getElementById('addLabour').onclick = ()=> { formModel.labour.push({desc:'', costPerAcre:''}); renderAll(); };
+document.getElementById('addWeed').onclick = ()=> { formModel.weedingChems.push({name:'', price:'', labour:''}); renderAll(); };
+document.getElementById('addBoost').onclick = ()=> { formModel.boostingChems.push({name:'', price:'', labour:''}); renderAll(); };
+
+/* ===============
+   Save Draft / Save Final (store whole record)
+   =============== */
+document.getElementById('saveDraft').onclick = () => {
+  readForm();
+  formModel.status = 'draft';
+  formModel.createdAt = formModel.createdAt || new Date().toISOString();
+  const drafts = loadDrafts();
+  const idx = drafts.findIndex(d => d.id === formModel.id);
+  if(idx >= 0) drafts[idx] = JSON.parse(JSON.stringify(formModel));
+  else drafts.push(JSON.parse(JSON.stringify(formModel)));
+  saveDrafts(drafts);
+  populateForm();
+  refreshList();
+  alert('Draft saved (session).');
+};
+
+document.getElementById('saveFinal').onclick = () => {
+  readForm();
+  if(!formModel.year || !formModel.acres){
+    if(!confirm('Year or acreage missing. Save as final anyway?')) return;
+  }
+
+  // Calculate totals before saving
+  const totals = computeTotals(formModel);
+  formModel.calculation = totals; // save calculation breakdown
+
+  formModel.status = 'final';
+  formModel.createdAt = formModel.createdAt || new Date().toISOString();
+
+  const records = loadRecords();
+  records.push(JSON.parse(JSON.stringify(formModel)));
+  saveRecords(records);
+
+  // remove from drafts if present
+  const drafts = loadDrafts().filter(d => d.id !== formModel.id);
+  saveDrafts(drafts);
+
+  alert('Record saved as final with calculations.');
+  resetToBlank();
+  refreshList();
+};
+
+
+/* helper to reset */
+function resetToBlank(){ formModel = blankRecord(); populateForm(); }
+
+/* ===============
+   Calculate (does not change saved record)
+   =============== */
+document.getElementById('calcBtn').onclick = ()=> {
+  readForm();
+  const res = computeTotals(formModel);
+  showCalc(res);
+};
+
+function parseNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
+
+function computeTotals(rec){
+  const acres = parseNum(rec.acres) || 1;
+  const landPerAcre = (rec.landPrep||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
+  const seedPerAcre = (rec.seeds||[]).reduce((s,i)=>s + parseNum(i.pricePerBag)*parseNum(i.ratePerAcre),0);
+  const fertPerAcre = (rec.fertilizers||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
+  const labourPerAcre = (rec.labour||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
+  const chemWeed = (rec.weedingChems||[]).reduce((s,i)=>s+parseNum(i.price)+parseNum(i.labour),0);
+  const chemBoost = (rec.boostingChems||[]).reduce((s,i)=>s+parseNum(i.price)+parseNum(i.labour),0);
+  const harvestPerAcre = parseNum(rec.harvestCost);
+  const perAcre = landPerAcre + seedPerAcre + fertPerAcre + labourPerAcre + chemWeed + chemBoost + harvestPerAcre;
+  const totalCost = perAcre * acres;
+  const revenue = parseNum(rec.bagsPerAcre) * parseNum(rec.pricePerBag) * acres;
+  const profit = revenue - totalCost;
+  return {acres, perAcre, totalCost, revenue, profit, breakdown:{landPerAcre, seedPerAcre, fertPerAcre, labourPerAcre, chemWeed, chemBoost, harvestPerAcre}};
+}
+
+function showCalc(r){
+  refs.calcResult.innerHTML = '';
+  const mk = (t,v) => {
+    const el = document.createElement('div'); el.className='chip';
+    el.innerHTML = `<div style="font-weight:700">${t}</div><div style="font-size:13px;color:#334155">${formatMoney(v)}</div>`;
+    return el;
+  };
+  refs.calcResult.appendChild(mk('Per acre total', r.perAcre));
+  refs.calcResult.appendChild(mk('Total cost', r.totalCost));
+  refs.calcResult.appendChild(mk('Estimated revenue', r.revenue));
+  refs.calcResult.appendChild(mk('Profit', r.profit));
+}
+
+function formatMoney(n){ return Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+
+/* ===============
+   Records viewer (Drafts / Saved)
+   =============== */
+document.getElementById('showDraftsBtn').onclick = ()=> { showing='drafts'; toggleTabs(); refreshList(); };
+document.getElementById('showFinalBtn').onclick = ()=> { showing='final'; toggleTabs(); refreshList(); };
+
+function toggleTabs(){
+  document.getElementById('showDraftsBtn').classList.toggle('active', showing==='drafts');
+  document.getElementById('showFinalBtn').classList.toggle('active', showing==='final');
+}
+
+function refreshList(){
+  refs.listArea.innerHTML = '';
+  const container = refs.listArea;
+  const drafts = loadDrafts();
+  const records = loadRecords();
+  const data = showing === 'drafts' ? drafts : records;
+  if(data.length === 0){
+    container.innerHTML = `<div class="muted">No ${showing === 'drafts' ? 'drafts' : 'saved records'}</div>`; return;
+  }
+  // group by year
+  const groups = data.reduce((g, rec) => { (g[rec.year]||(g[rec.year]=[])).push(rec); return g; }, {});
+  Object.keys(groups).sort((a,b)=>b-a).forEach(year=>{
+    const header = document.createElement('div'); header.className='year-row';
+    header.innerHTML = `<div><strong>${year}</strong> • ${groups[year].length} record(s)</div><div class="muted small">${showing==='drafts'?'drafts':'saved'}</div>`;
+    container.appendChild(header);
+    const table = document.createElement('table');
+    table.innerHTML = `<thead><tr><th>#</th><th>Acreage</th><th>Notes</th><th>Summary (categories with items)</th><th>Actions</th></tr></thead><tbody></tbody>`;
+    groups[year].forEach((rec, idx)=>{
+      const row = document.createElement('tr');
+      const summary = makeSummary(rec);
+      const actionsCell = document.createElement('td');
+      // view
+      const btnView = document.createElement('button'); btnView.className='btn btn-ghost'; btnView.textContent='View';
+      btnView.onclick = ()=> viewRecord(rec);
+      actionsCell.appendChild(btnView);
+      // export
+      const btnExport = document.createElement('button'); btnExport.className='btn btn-ghost'; btnExport.textContent='Export';
+      btnExport.onclick = ()=> downloadJSON(rec, `wheat_record_${rec.id}.json`);
+      actionsCell.appendChild(btnExport);
+      // delete
+      const btnDelete = document.createElement('button'); btnDelete.className='btn btn-ghost'; btnDelete.textContent='Delete';
+      btnDelete.onclick = ()=> {
+        if(!confirm('Delete this record?')) return;
+        if(showing==='drafts'){
+          const newDrafts = loadDrafts().filter(d => d.id !== rec.id); saveDrafts(newDrafts);
+        } else {
+          const newRecs = loadRecords().filter(r => r.id !== rec.id); saveRecords(newRecs);
+        }
+        refreshList();
+      };
+      actionsCell.appendChild(btnDelete);
+      // if draft, edit button
+      if(showing === 'drafts'){
+        const btnEdit = document.createElement('button'); btnEdit.className='btn btn-primary'; btnEdit.textContent='Edit';
+        btnEdit.onclick = ()=> { editDraft(rec.id); window.scrollTo({top:0, behavior:'smooth'}); };
+        actionsCell.appendChild(btnEdit);
+      }
+      row.innerHTML = `<td>${idx+1}</td><td>${rec.acres||'—'}</td><td>${rec.notes||'—'}</td><td>${summary}</td>`;
+      row.appendChild(actionsCell);
+      table.querySelector('tbody').appendChild(row);
+    });
+    container.appendChild(table);
+  });
+}
+
+/* short summary of categories present */
+function makeSummary(rec){
+  const parts = [];
+  if(rec.landPrep && rec.landPrep.length) parts.push(`LandPrep(${rec.landPrep.length})`);
+  if(rec.seeds && rec.seeds.length) parts.push(`Seed(${rec.seeds.length})`);
+  if(rec.fertilizers && rec.fertilizers.length) parts.push(`Fertilizer(${rec.fertilizers.length})`);
+  if(rec.labour && rec.labour.length) parts.push(`Labour(${rec.labour.length})`);
+  if(rec.weedingChems && rec.weedingChems.length) parts.push(`WeedChem(${rec.weedingChems.length})`);
+  if(rec.boostingChems && rec.boostingChems.length) parts.push(`BoostChem(${rec.boostingChems.length})`);
+  return parts.join(' • ') || '—';
+}
+
+/* view record (open new tab with pretty JSON) */
+function viewRecord(rec) {
+  const modal = document.getElementById('recordModal');
+  const content = document.getElementById('modalContent');
+
+  // Helper function
+  const listItems = (arr, key) => (arr && arr.length)
+    ? arr.map(item => item[key] || '—').join(', ')
+    : '—';
+
+  content.innerHTML = `
+    <h2>🌾 Wheat Record — ${rec.year}</h2>
+    <p><strong>Acreage:</strong> ${rec.acres || '—'} acres</p>
+    <p><strong>Notes:</strong> ${rec.notes || '—'}</p>
+
+    <h3>Breakdown</h3>
+    <ul>
+      <li><strong>Land Preparation:</strong> ${listItems(rec.landPrep, 'desc')}</li>
+      <li><strong>Seeds:</strong> ${listItems(rec.seeds, 'type')}</li>
+      <li><strong>Fertilizers:</strong> ${listItems(rec.fertilizers, 'type')}</li>
+      <li><strong>Labour:</strong> ${listItems(rec.labour, 'desc')}</li>
+      <li><strong>Weeding Chemicals:</strong> ${listItems(rec.weedingChems, 'name')}</li>
+      <li><strong>Boosting Chemicals:</strong> ${listItems(rec.boostingChems, 'name')}</li>
+    </ul>
+
+    <h3>Harvest & Output</h3>
+    <p><strong>Harvest cost per acre:</strong> ${rec.harvestCost || 0}</p>
+    <p><strong>Bags yield per acre:</strong> ${rec.bagsPerAcre || 0}</p>
+    <p><strong>Price per bag:</strong> ${rec.pricePerBag || 0}</p>
+
+    ${rec.calculation ? `
+      <h3>Saved Calculation</h3>
+      <p><strong>Per Acre Cost:</strong> ${formatMoney(rec.calculation.perAcre)}</p>
+      <p><strong>Total Cost:</strong> ${formatMoney(rec.calculation.totalCost)}</p>
+      <p><strong>Revenue:</strong> ${formatMoney(rec.calculation.revenue)}</p>
+      <p><strong>Profit / Loss:</strong> ${formatMoney(rec.calculation.profit)}</p>
+    ` : ''}
+  `;
+
+  modal.style.display = 'flex';
+}
+
+// Close button logic
+document.getElementById('closeModalBtn').onclick = () => {
+  document.getElementById('recordModal').style.display = 'none';
+};
+
+// Also close when clicking outside content
+document.getElementById('recordModal').onclick = (e) => {
+  if (e.target.id === 'recordModal') {
+    document.getElementById('recordModal').style.display = 'none';
+  }
+};
+
+
+/* edit draft loaded into form */
+function editDraft(id){
+  const drafts = loadDrafts();
+  const d = drafts.find(x=>x.id===id);
+  if(!d){ alert('Draft not found'); return; }
+  formModel = JSON.parse(JSON.stringify(d));
+  populateForm();
+}
+
+/* ===============
+   Export / Import / Clear
+   =============== */
+document.getElementById('exportAll').onclick = ()=> {
+  const payload = { drafts: loadDrafts(), records: loadRecords(), exportedAt: new Date().toISOString() };
+  downloadJSON(payload, 'wheat_export_session_all.json');
+};
+
+document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
+
+document.getElementById('importFile').onchange = (e) => {
+  const f = e.target.files[0]; if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ()=> {
+    try {
+      const data = JSON.parse(reader.result);
+      // merge arrays if present
+      if(Array.isArray(data.drafts)) saveDrafts(loadDrafts().concat(data.drafts));
+      if(Array.isArray(data.records)) saveRecords(loadRecords().concat(data.records));
+      // if it's single record(s)
+      if(!data.drafts && !data.records){
+        // detect array or single obj
+        if(Array.isArray(data)){
+          // assume these are records -> add to saved
+          saveRecords(loadRecords().concat(data));
+        } else if(data.id){
+          // single record
+          if(data.status === 'final') saveRecords(loadRecords().concat([data])); else saveDrafts(loadDrafts().concat([data]));
+        }
+      }
+      alert('Import complete (merged into session).');
+      refreshList();
+    } catch(err){ alert('Invalid JSON'); }
+  };
+  reader.readAsText(f);
+};
+
+document.getElementById('clearAll').onclick = ()=> {
+  if(!confirm('Clear ALL drafts and saved records from this session?')) return;
+  sessionStorage.removeItem(S_DRAFTS); sessionStorage.removeItem(S_RECORDS);
+  refreshList(); alert('Cleared session records.');
+};
+
+/* download helper */
+function downloadJSON(obj, filename){
+  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ===============
+   Init
+   =============== */
+document.getElementById('clearForm').onclick = ()=> { if(confirm('Clear current form?')) resetToBlank(); };
+
+window.addEventListener('load', ()=> {
+  resetForm();
+  refreshList();
+  // set default year to current
+  refs.year.value = (new Date()).getFullYear();
+});
+</script>
+</body>
+</html>
