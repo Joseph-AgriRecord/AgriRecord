@@ -15,11 +15,31 @@
   .card{background:var(--card);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 6px 16px rgba(10,20,40,0.06)}
   label{display:block;font-size:15px;color:var(--muted);margin-top:10px}
   .row{display:flex;gap:10px;flex-wrap:wrap}
-  .col{flex:1;min-width:140px}
-  input[type=text], input[type=number], select, textarea{
-    width:100%;padding:14px;border-radius:8px;border:1px solid #e6e9ef;margin-top:8px;
-    box-sizing:border-box;font-size:17px;background:#fff
-  }
+  .col{flex:1;color: #1e3a8a;font-size: 19px;min-width:140px}
+ input[type=text],
+input[type=number],
+select,
+textarea {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db; /* light gray border */
+  margin-top: 8px;
+  box-sizing: border-box;
+  font-size: 17px;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type=text]:focus,
+input[type=number]:focus,
+select:focus,
+textarea:focus {
+  border-color: #3b82f6; /* blue accent on focus */
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  outline: none;
+}
+
   .section-title{font-weight:800;margin-top:6px;font-size: 19px;color: #1e3a8a;margin-bottom:6px}
   .btn{display:inline-flex;gap:8px;align-items:center;padding:12px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
   .btn-primary{background:var(--accent);color:#fff}
@@ -56,7 +76,7 @@
 
 <div class="container">
   <div class="card" id="formCard">
-    <div style="display:flex;justify-content:space-between;align-items:center">
+    <div style="display:flex;justify-content:space-between;color: #1e3a8a;font-size: 19px;align-items:center">
       <strong>New / Edit Record</strong>
       <div class="small muted">Status: <span id="recordStatus">Draft</span></div>
     </div>
