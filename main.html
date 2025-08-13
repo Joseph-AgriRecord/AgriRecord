@@ -236,20 +236,121 @@ textarea:focus {
 </div>
 
 <script>
-/* ===============
-   SESSION STORAGE KEYS
-   =============== */
-/* NOTE: this code uses sessionStorage per your request.
-   If you later prefer persistent storage across browser sessions,
-   replace sessionStorage with localStorage in the helpers below. */
+/* ============================================================
+   OFFLINE STORAGE (IndexedDB) — keeps Drafts & Saved records
+   ============================================================ */
+const DB_NAME = 'wheat_farm_db_v1';
+const STORE_DRAFTS = 'drafts';
+const STORE_RECORDS = 'records';
+
+let idb;                 // IndexedDB instance
+let cacheDrafts = [];    // in-memory mirrors to keep rest of your code sync
+let cacheRecords = [];
+
+/* ---------- IndexedDB helpers ---------- */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
+        db.createObjectStore(STORE_DRAFTS, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_RECORDS)) {
+        db.createObjectStore(STORE_RECORDS, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = (e) => { idb = e.target.result; resolve(); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function idbGetAll(storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(storeName, 'readonly');
+    const store = tx.objectStore(storeName);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function idbClear(storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    const req = store.clear();
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function idbPutMany(storeName, items) {
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(storeName, 'readwrite');
+    const store = tx.objectStore(storeName);
+    (items || []).forEach(item => store.put(item));
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
+
+async function idbReplace(storeName, items) {
+  await idbClear(storeName);
+  await idbPutMany(storeName, items);
+}
+
+/* ---------- Public API (keeps your existing function names) ---------- */
+function loadDrafts() {
+  // return a deep copy so UI edits don't mutate cache accidentally
+  return JSON.parse(JSON.stringify(cacheDrafts));
+}
+function loadRecords() {
+  return JSON.parse(JSON.stringify(cacheRecords));
+}
+function saveDrafts(arr) {
+  cacheDrafts = JSON.parse(JSON.stringify(arr));
+  // write-through to IndexedDB (no await needed for UI)
+  idbReplace(STORE_DRAFTS, cacheDrafts).catch(console.error);
+}
+function saveRecords(arr) {
+  cacheRecords = JSON.parse(JSON.stringify(arr));
+  idbReplace(STORE_RECORDS, cacheRecords).catch(console.error);
+}
+
+/* ---------- One-time migration from old localStorage (if any) ---------- */
 const S_DRAFTS = 'wheat_session_drafts_v1';
 const S_RECORDS = 'wheat_session_records_v1';
 
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
-function loadDrafts(){ return JSON.parse(localStorage.getItem(S_DRAFTS) || '[]'); }
-function saveDrafts(arr){ localStorage.setItem(S_DRAFTS, JSON.stringify(arr)); }
-function loadRecords(){ return JSON.parse(localStorage.getItem(S_RECORDS) || '[]'); }
-function saveRecords(arr){ localStorage.setItem(S_RECORDS, JSON.stringify(arr)); }
+async function migrateFromLocalStorageIfNeeded() {
+  try {
+    const lsDrafts = JSON.parse(localStorage.getItem(S_DRAFTS) || '[]');
+    const lsRecords = JSON.parse(localStorage.getItem(S_RECORDS) || '[]');
+    let changed = false;
+
+    if ((!cacheDrafts || cacheDrafts.length === 0) && Array.isArray(lsDrafts) && lsDrafts.length) {
+      cacheDrafts = lsDrafts;
+      await idbReplace(STORE_DRAFTS, cacheDrafts);
+      changed = true;
+    }
+    if ((!cacheRecords || cacheRecords.length === 0) && Array.isArray(lsRecords) && lsRecords.length) {
+      cacheRecords = lsRecords;
+      await idbReplace(STORE_RECORDS, cacheRecords);
+      changed = true;
+    }
+    if (changed) {
+      // clean old localStorage keys so we don't re-import
+      localStorage.removeItem(S_DRAFTS);
+      localStorage.removeItem(S_RECORDS);
+    }
+  } catch (e) {
+    console.warn('Migration skipped:', e);
+  }
+}
+
+/* ============================================================
+   YOUR ORIGINAL APP LOGIC (unchanged UI/structure)
+   ============================================================ */
 
 /* ===============
    DOM refs & model
@@ -271,6 +372,8 @@ const refs = {
   calcResult: document.getElementById('calcResult'),
   listArea: document.getElementById('listArea')
 };
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 
 let formModel = null; // current record being edited / created
 let showing = 'drafts'; // which tab
@@ -399,7 +502,7 @@ document.getElementById('saveDraft').onclick = () => {
   saveDrafts(drafts);
   populateForm();
   refreshList();
-  alert('Draft saved (session).');
+  alert('Draft saved offline.');
 };
 
 document.getElementById('saveFinal').onclick = () => {
@@ -423,11 +526,10 @@ document.getElementById('saveFinal').onclick = () => {
   const drafts = loadDrafts().filter(d => d.id !== formModel.id);
   saveDrafts(drafts);
 
-  alert('Record saved as final with calculations.');
+  alert('Record saved offline as final with calculations.');
   resetToBlank();
   refreshList();
 };
-
 
 /* helper to reset */
 function resetToBlank(){ formModel = blankRecord(); populateForm(); }
@@ -552,12 +654,11 @@ function makeSummary(rec){
   return parts.join(' • ') || '—';
 }
 
-/* view record (open new tab with pretty JSON) */
+/* view record (modal pretty view) */
 function viewRecord(rec) {
   const modal = document.getElementById('recordModal');
   const content = document.getElementById('modalContent');
 
-  // Helper function
   const listItems = (arr, key) => (arr && arr.length)
     ? arr.map(item => item[key] || '—').join(', ')
     : '—';
@@ -598,7 +699,6 @@ function viewRecord(rec) {
 document.getElementById('closeModalBtn').onclick = () => {
   document.getElementById('recordModal').style.display = 'none';
 };
-
 // Also close when clicking outside content
 document.getElementById('recordModal').onclick = (e) => {
   if (e.target.id === 'recordModal') {
@@ -606,57 +706,63 @@ document.getElementById('recordModal').onclick = (e) => {
   }
 };
 
-
-/* edit draft loaded into form */
-function editDraft(id){
-  const drafts = loadDrafts();
-  const d = drafts.find(x=>x.id===id);
-  if(!d){ alert('Draft not found'); return; }
-  formModel = JSON.parse(JSON.stringify(d));
-  populateForm();
-}
-
 /* ===============
    Export / Import / Clear
    =============== */
 document.getElementById('exportAll').onclick = ()=> {
   const payload = { drafts: loadDrafts(), records: loadRecords(), exportedAt: new Date().toISOString() };
-  downloadJSON(payload, 'wheat_export_session_all.json');
+  downloadJSON(payload, 'wheat_export_all.json');
 };
 
 document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
 
-document.getElementById('importFile').onchange = (e) => {
+document.getElementById('importFile').onchange = async (e) => {
   const f = e.target.files[0]; if(!f) return;
   const reader = new FileReader();
-  reader.onload = ()=> {
+  reader.onload = async ()=> {
     try {
       const data = JSON.parse(reader.result);
+
+      // current caches
+      let drafts = loadDrafts();
+      let records = loadRecords();
+
       // merge arrays if present
-      if(Array.isArray(data.drafts)) saveDrafts(loadDrafts().concat(data.drafts));
-      if(Array.isArray(data.records)) saveRecords(loadRecords().concat(data.records));
-      // if it's single record(s)
+      if(Array.isArray(data.drafts)) drafts = drafts.concat(data.drafts);
+      if(Array.isArray(data.records)) records = records.concat(data.records);
+
       if(!data.drafts && !data.records){
-        // detect array or single obj
         if(Array.isArray(data)){
-          // assume these are records -> add to saved
-          saveRecords(loadRecords().concat(data));
+          records = records.concat(data);
         } else if(data.id){
-          // single record
-          if(data.status === 'final') saveRecords(loadRecords().concat([data])); else saveDrafts(loadDrafts().concat([data]));
+          if(data.status === 'final') records = records.concat([data]);
+          else drafts = drafts.concat([data]);
         }
       }
-      alert('Import complete (merged into session).');
+
+      // de-dup by id
+      const byId = arr => Object.values(arr.reduce((m,x)=>{ m[x.id]=x; return m; },{}));
+      drafts = byId(drafts);
+      records = byId(records);
+
+      saveDrafts(drafts);
+      saveRecords(records);
+
+      alert('Import complete (merged offline).');
       refreshList();
     } catch(err){ alert('Invalid JSON'); }
   };
   reader.readAsText(f);
 };
 
-document.getElementById('clearAll').onclick = ()=> {
-  if(!confirm('Clear ALL drafts and saved records from this session?')) return;
-  sessionStorage.removeItem(S_DRAFTS); sessionStorage.removeItem(S_RECORDS);
-  refreshList(); alert('Cleared session records.');
+document.getElementById('clearAll').onclick = async ()=> {
+  if(!confirm('Clear ALL drafts and saved records stored offline?')) return;
+  await idbClear(STORE_DRAFTS);
+  await idbClear(STORE_RECORDS);
+  cacheDrafts = [];
+  cacheRecords = [];
+  refreshList();
+  alert('Cleared offline data.');
 };
 
 /* download helper */
@@ -672,12 +778,21 @@ function downloadJSON(obj, filename){
    =============== */
 document.getElementById('clearForm').onclick = ()=> { if(confirm('Clear current form?')) resetToBlank(); };
 
-window.addEventListener('load', ()=> {
+window.addEventListener('load', async ()=> {
+  // 1) open DB
+  await openDB();
+  // 2) hydrate caches from IndexedDB
+  cacheDrafts = await idbGetAll(STORE_DRAFTS);
+  cacheRecords = await idbGetAll(STORE_RECORDS);
+  // 3) one-time migration from any old localStorage data
+  await migrateFromLocalStorageIfNeeded();
+
   resetForm();
   refreshList();
   // set default year to current
   refs.year.value = (new Date()).getFullYear();
 });
 </script>
+
 </body>
 </html>
