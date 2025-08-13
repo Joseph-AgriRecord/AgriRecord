@@ -237,590 +237,231 @@ textarea:focus {
 </div>
 
 <script>
-/* ============================================================
-   OFFLINE STORAGE (IndexedDB) — keeps Drafts & Saved records
-   ============================================================ */
-const DB_NAME = 'wheat_farm_db_v1';
-const STORE_DRAFTS = 'drafts';
-const STORE_RECORDS = 'records';
+  /* ==========================
+   IndexedDB Setup
+========================== */
+const DB_NAME = "FarmingAppDB";
+const DB_VERSION = 1;
+let db;
 
-let idb;                 // IndexedDB instance
-let cacheDrafts = [];    // in-memory mirrors to keep rest of your code sync
-let cacheRecords = [];
-
-/* ---------- IndexedDB helpers ---------- */
-function openDB() {
+function initDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains(STORE_DRAFTS)) {
-        db.createObjectStore(STORE_DRAFTS, { keyPath: 'id' });
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = (e) => {
+      db = e.target.result;
+      if (!db.objectStoreNames.contains("drafts")) {
+        db.createObjectStore("drafts", { keyPath: "id", autoIncrement: true });
       }
-      if (!db.objectStoreNames.contains(STORE_RECORDS)) {
-        db.createObjectStore(STORE_RECORDS, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains("saved")) {
+        db.createObjectStore("saved", { keyPath: "id", autoIncrement: true });
       }
     };
-    req.onsuccess = (e) => { idb = e.target.result; resolve(); };
-    req.onerror = (e) => reject(e.target.error);
+
+    request.onsuccess = (e) => {
+      db = e.target.result;
+      resolve();
+    };
+
+    request.onerror = (e) => reject(e.target.error);
   });
 }
 
-function idbGetAll(storeName) {
+function saveItem(storeName, item) {
   return new Promise((resolve, reject) => {
-    const tx = idb.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    const req = store.getAll();
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = (e) => reject(e.target.error);
-  });
-}
-
-function idbClear(storeName) {
-  return new Promise((resolve, reject) => {
-    const tx = idb.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    const req = store.clear();
-    req.onsuccess = () => resolve();
-    req.onerror = (e) => reject(e.target.error);
-  });
-}
-
-function idbPutMany(storeName, items) {
-  return new Promise((resolve, reject) => {
-    const tx = idb.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    (items || []).forEach(item => store.put(item));
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).put(item);
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
   });
 }
 
-async function idbReplace(storeName, items) {
-  await idbClear(storeName);
-  await idbPutMany(storeName, items);
+function getItem(storeName, id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const request = tx.objectStore(storeName).get(Number(id));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
 }
 
-/* ---------- Public API (keeps your existing function names) ---------- */
-function loadDrafts() {
-  // return a deep copy so UI edits don't mutate cache accidentally
-  return JSON.parse(JSON.stringify(cacheDrafts));
-}
-function loadRecords() {
-  return JSON.parse(JSON.stringify(cacheRecords));
-}
-function saveDrafts(arr) {
-  cacheDrafts = JSON.parse(JSON.stringify(arr));
-  // write-through to IndexedDB (no await needed for UI)
-  idbReplace(STORE_DRAFTS, cacheDrafts).catch(console.error);
-}
-function saveRecords(arr) {
-  cacheRecords = JSON.parse(JSON.stringify(arr));
-  idbReplace(STORE_RECORDS, cacheRecords).catch(console.error);
+function getAllItems(storeName) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readonly");
+    const request = tx.objectStore(storeName).getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = (e) => reject(e.target.error);
+  });
 }
 
-/* ---------- One-time migration from old localStorage (if any) ---------- */
-const S_DRAFTS = 'wheat_session_drafts_v1';
-const S_RECORDS = 'wheat_session_records_v1';
+function deleteItem(storeName, id) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(storeName, "readwrite");
+    tx.objectStore(storeName).delete(Number(id));
+    tx.oncomplete = () => resolve();
+    tx.onerror = (e) => reject(e.target.error);
+  });
+}
 
-async function migrateFromLocalStorageIfNeeded() {
-  try {
-    const lsDrafts = JSON.parse(localStorage.getItem(S_DRAFTS) || '[]');
-    const lsRecords = JSON.parse(localStorage.getItem(S_RECORDS) || '[]');
-    let changed = false;
+/* ==========================
+   Form Handling
+========================== */
+document.getElementById("saveDraft").addEventListener("click", async () => {
+  const data = collectFormData();
+  if (!data) return;
 
-    if ((!cacheDrafts || cacheDrafts.length === 0) && Array.isArray(lsDrafts) && lsDrafts.length) {
-      cacheDrafts = lsDrafts;
-      await idbReplace(STORE_DRAFTS, cacheDrafts);
-      changed = true;
-    }
-    if ((!cacheRecords || cacheRecords.length === 0) && Array.isArray(lsRecords) && lsRecords.length) {
-      cacheRecords = lsRecords;
-      await idbReplace(STORE_RECORDS, cacheRecords);
-      changed = true;
-    }
-    if (changed) {
-      // clean old localStorage keys so we don't re-import
-      localStorage.removeItem(S_DRAFTS);
-      localStorage.removeItem(S_RECORDS);
-    }
-  } catch (e) {
-    console.warn('Migration skipped:', e);
+  if (data.id) {
+    await saveItem("drafts", data);
+  } else {
+    delete data.id;
+    await saveItem("drafts", data);
   }
-}
 
-/* ============================================================
-   YOUR ORIGINAL APP LOGIC (unchanged UI/structure)
-   ============================================================ */
+  clearForm();
+  loadTable("drafts");
+});
 
-/* ===============
-   DOM refs & model
-   =============== */
-const refs = {
-  year: document.getElementById('year'),
-  acres: document.getElementById('acres'),
-  notes: document.getElementById('notes'),
-  landPrepList: document.getElementById('landPrepList'),
-  seedList: document.getElementById('seedList'),
-  fertList: document.getElementById('fertList'),
-  labourList: document.getElementById('labourList'),
-  weedingList: document.getElementById('weedingList'),
-  boostList: document.getElementById('boostList'),
-  harvestCost: document.getElementById('harvestCost'),
-  bagsPerAcre: document.getElementById('bagsPerAcre'),
-  pricePerBag: document.getElementById('pricePerBag'),
-  recordStatus: document.getElementById('recordStatus'),
-  calcResult: document.getElementById('calcResult'),
-  listArea: document.getElementById('listArea')
-};
+document.getElementById("saveFinal").addEventListener("click", async () => {
+  const data = collectFormData();
+  if (!data) return;
 
-function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  if (data.id) {
+    await saveItem("saved", data);
+  } else {
+    delete data.id;
+    await saveItem("saved", data);
+  }
 
-let formModel = null; // current record being edited / created
-let showing = 'drafts'; // which tab
+  clearForm();
+  loadTable("saved");
+});
 
-function blankRecord(){
+function collectFormData() {
   return {
-    id: uid(),
-    year: (new Date()).getFullYear().toString(),
-    acres: '',
-    notes: '',
-    landPrep: [],      // [{desc, costPerAcre}]
-    seeds: [],         // [{type, pricePerBag, ratePerAcre}]
-    fertilizers: [],   // [{type, costPerAcre, rate}]
-    labour: [],        // [{desc, costPerAcre}]
-    weedingChems: [],  // [{name, price, labour}]
-    boostingChems: [], // [{name, price, labour}]
-    harvestCost: '',
-    bagsPerAcre: '',
-    pricePerBag: '',
-    status: 'draft',
-    createdAt: new Date().toISOString()
+    id: document.getElementById("recordId").value
+      ? Number(document.getElementById("recordId").value)
+      : null,
+    acres: document.getElementById("acres").value.trim(),
+    notes: document.getElementById("notes").value.trim(),
+    summary: document.getElementById("calcResult").innerText.trim()
   };
 }
 
-/* ===============
-   Render helpers for repeatable lists
-   =============== */
-function resetForm(){
-  formModel = blankRecord();
-  populateForm();
+function clearForm() {
+  document.getElementById("recordId").value = "";
+  document.getElementById("acres").value = "";
+  document.getElementById("notes").value = "";
+  document.getElementById("calcResult").innerText = "";
 }
 
-function populateForm(){
-  refs.year.value = formModel.year || '';
-  refs.acres.value = formModel.acres || '';
-  refs.notes.value = formModel.notes || '';
-  refs.harvestCost.value = formModel.harvestCost || '';
-  refs.bagsPerAcre.value = formModel.bagsPerAcre || '';
-  refs.pricePerBag.value = formModel.pricePerBag || '';
-  refs.recordStatus.textContent = formModel.status === 'final' ? 'Saved' : 'Draft';
-  renderAll();
-}
+/* ==========================
+   Table Display
+========================== */
+async function loadTable(showing) {
+  const container = document.getElementById("listArea");
+  container.innerHTML = "";
 
-function readForm(){
-  formModel.year = refs.year.value;
-  formModel.acres = refs.acres.value;
-  formModel.notes = refs.notes.value;
-  formModel.harvestCost = refs.harvestCost.value;
-  formModel.bagsPerAcre = refs.bagsPerAcre.value;
-  formModel.pricePerBag = refs.pricePerBag.value;
-}
-
-/* utility to create input element */
-function makeInput(value, placeholder, oninput, numeric=false){
-  const inp = document.createElement('input');
-  inp.placeholder = placeholder;
-  if(numeric){ inp.type = 'number'; inp.step = '0.01'; }
-  else inp.type = 'text';
-  inp.value = value === undefined ? '' : value;
-  inp.oninput = oninput;
-  return inp;
-}
-
-/* render any repeatable list */
-function renderRepeatable(list, container, schema){
-  container.innerHTML = '';
-  if(list.length === 0){
-    const p = document.createElement('div'); p.className='small-muted'; p.textContent='No items yet.';
-    container.appendChild(p); return;
-  }
-  list.forEach((item, idx) => {
-    const box = document.createElement('div'); box.className = 'chem-box';
-    const row = document.createElement('div'); row.className = 'chem-row';
-    // fields based on schema: [{key, label, numeric}]
-    schema.forEach(f => {
-      const inp = makeInput(item[f.key], f.label, (e) => {
-        // keep exact values typed
-        list[idx][f.key] = e.target.value;
-      }, f.numeric);
-      row.appendChild(inp);
-    });
-    const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px';
-    const btnRemove = document.createElement('button'); btnRemove.className='btn btn-ghost'; btnRemove.textContent='Remove';
-    btnRemove.onclick = () => {
-      if(!confirm('Remove this item?')) return;
-      list.splice(idx,1); renderAll();
-    };
-    const btnClone = document.createElement('button'); btnClone.className='btn btn-ghost'; btnClone.textContent='Clone';
-    btnClone.onclick = () => {
-      const copy = JSON.parse(JSON.stringify(item)); copy.id = uid(); list.splice(idx+1,0,copy); renderAll();
-    };
-    actions.appendChild(btnRemove); actions.appendChild(btnClone);
-    box.appendChild(row); box.appendChild(actions);
-    container.appendChild(box);
-  });
-}
-
-function renderAll(){
-  renderRepeatable(formModel.landPrep, refs.landPrepList, [{key:'desc',label:'Description',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true}]);
-  renderRepeatable(formModel.seeds, refs.seedList, [{key:'type',label:'Seed type',numeric:false},{key:'pricePerBag',label:'Price per bag',numeric:true},{key:'ratePerAcre',label:'Bags per acre',numeric:true}]);
-  renderRepeatable(formModel.fertilizers, refs.fertList, [{key:'type',label:'Fertilizer type',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true},{key:'rate',label:'Rate',numeric:true}]);
-  renderRepeatable(formModel.labour, refs.labourList, [{key:'desc',label:'Task',numeric:false},{key:'costPerAcre',label:'Cost per acre',numeric:true}]);
-  renderRepeatable(formModel.weedingChems, refs.weedingList, [{key:'name',label:'Name',numeric:false},{key:'price',label:'Price',numeric:true},{key:'labour',label:'Labour cost',numeric:true}]);
-  renderRepeatable(formModel.boostingChems, refs.boostList, [{key:'name',label:'Name',numeric:false},{key:'price',label:'Price',numeric:true},{key:'labour',label:'Labour cost',numeric:true}]);
-}
-
-/* add item button handlers */
-document.getElementById('addLandPrep').onclick = ()=> { formModel.landPrep.push({desc:'', costPerAcre:''}); renderAll(); };
-document.getElementById('addSeed').onclick = ()=> { formModel.seeds.push({type:'', pricePerBag:'', ratePerAcre:''}); renderAll(); };
-document.getElementById('addFert').onclick = ()=> { formModel.fertilizers.push({type:'', costPerAcre:'', rate:''}); renderAll(); };
-document.getElementById('addLabour').onclick = ()=> { formModel.labour.push({desc:'', costPerAcre:''}); renderAll(); };
-document.getElementById('addWeed').onclick = ()=> { formModel.weedingChems.push({name:'', price:'', labour:''}); renderAll(); };
-document.getElementById('addBoost').onclick = ()=> { formModel.boostingChems.push({name:'', price:'', labour:''}); renderAll(); };
-
-/* ===============
-   Save Draft / Save Final (store whole record)
-   =============== */
-document.getElementById('saveDraft').onclick = () => {
-  readForm();
-  formModel.status = 'draft';
-  formModel.createdAt = formModel.createdAt || new Date().toISOString();
-  const drafts = loadDrafts();
-  const idx = drafts.findIndex(d => d.id === formModel.id);
-  if(idx >= 0) drafts[idx] = JSON.parse(JSON.stringify(formModel));
-  else drafts.push(JSON.parse(JSON.stringify(formModel)));
-  saveDrafts(drafts);
-  populateForm();
-  refreshList();
-  alert('Draft saved offline.');
-};
-
-document.getElementById('saveFinal').onclick = () => {
-  readForm();
-  if(!formModel.year || !formModel.acres){
-    if(!confirm('Year or acreage missing. Save as final anyway?')) return;
-  }
-
-  // Calculate totals before saving
-  const totals = computeTotals(formModel);
-  formModel.calculation = totals; // save calculation breakdown
-
-  formModel.status = 'final';
-  formModel.createdAt = formModel.createdAt || new Date().toISOString();
-
-  const records = loadRecords();
-  records.push(JSON.parse(JSON.stringify(formModel)));
-  saveRecords(records);
-
-  // remove from drafts if present
-  const drafts = loadDrafts().filter(d => d.id !== formModel.id);
-  saveDrafts(drafts);
-
-  alert('Record saved offline as final with calculations.');
-  resetToBlank();
-  refreshList();
-};
-
-/* helper to reset */
-function resetToBlank(){ formModel = blankRecord(); populateForm(); }
-
-/* ===============
-   Calculate (does not change saved record)
-   =============== */
-document.getElementById('calcBtn').onclick = ()=> {
-  readForm();
-  const res = computeTotals(formModel);
-  showCalc(res);
-};
-
-function parseNum(v){ const n = parseFloat(v); return isNaN(n) ? 0 : n; }
-
-function computeTotals(rec){
-  const acres = parseNum(rec.acres) || 1;
-  const landPerAcre = (rec.landPrep||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
-  const seedPerAcre = (rec.seeds||[]).reduce((s,i)=>s + parseNum(i.pricePerBag)*parseNum(i.ratePerAcre),0);
-  const fertPerAcre = (rec.fertilizers||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
-  const labourPerAcre = (rec.labour||[]).reduce((s,i)=>s+parseNum(i.costPerAcre),0);
-  const chemWeed = (rec.weedingChems||[]).reduce((s,i)=>s+parseNum(i.price)+parseNum(i.labour),0);
-  const chemBoost = (rec.boostingChems||[]).reduce((s,i)=>s+parseNum(i.price)+parseNum(i.labour),0);
-  const harvestPerAcre = parseNum(rec.harvestCost);
-  const perAcre = landPerAcre + seedPerAcre + fertPerAcre + labourPerAcre + chemWeed + chemBoost + harvestPerAcre;
-  const totalCost = perAcre * acres;
-  const revenue = parseNum(rec.bagsPerAcre) * parseNum(rec.pricePerBag) * acres;
-  const profit = revenue - totalCost;
-  return {acres, perAcre, totalCost, revenue, profit, breakdown:{landPerAcre, seedPerAcre, fertPerAcre, labourPerAcre, chemWeed, chemBoost, harvestPerAcre}};
-}
-
-function showCalc(r){
-  refs.calcResult.innerHTML = '';
-  const mk = (t,v) => {
-    const el = document.createElement('div'); el.className='chip';
-    el.innerHTML = `<div style="font-weight:700">${t}</div><div style="font-size:13px;color:#334155">${formatMoney(v)}</div>`;
-    return el;
-  };
-  refs.calcResult.appendChild(mk('Per acre total', r.perAcre));
-  refs.calcResult.appendChild(mk('Total cost', r.totalCost));
-  refs.calcResult.appendChild(mk('Estimated revenue', r.revenue));
-  refs.calcResult.appendChild(mk('Profit', r.profit));
-}
-
-function formatMoney(n){ return Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
-
-/* ===============
-   Records viewer (Drafts / Saved)
-   =============== */
-document.getElementById('showDraftsBtn').onclick = ()=> { showing='drafts'; toggleTabs(); refreshList(); };
-document.getElementById('showFinalBtn').onclick = ()=> { showing='final'; toggleTabs(); refreshList(); };
-
-function toggleTabs(){
-  document.getElementById('showDraftsBtn').classList.toggle('active', showing==='drafts');
-  document.getElementById('showFinalBtn').classList.toggle('active', showing==='final');
-}
-
-function refreshList(){
-  refs.listArea.innerHTML = '';
-  const container = refs.listArea;
-  const drafts = loadDrafts();
-  const records = loadRecords();
-  const data = showing === 'drafts' ? drafts : records;
-  if(data.length === 0){
-    container.innerHTML = `<div class="muted">No ${showing === 'drafts' ? 'drafts' : 'saved records'}</div>`; return;
-  }
-  // group by year
-  const groups = data.reduce((g, rec) => { (g[rec.year]||(g[rec.year]=[])).push(rec); return g; }, {});
-  Object.keys(groups).sort((a,b)=>b-a).forEach(year=>{
-    const header = document.createElement('div'); header.className='year-row';
-    header.innerHTML = `<div><strong>${year}</strong> • ${groups[year].length} record(s)</div><div class="muted small">${showing==='drafts'?'drafts':'saved'}</div>`;
-    container.appendChild(header);
-    const table = document.createElement('table');
-    table.innerHTML = `<thead><tr><th>#</th><th>Acreage</th><th>Notes</th><th>Summary (categories with items)</th><th>Actions</th></tr></thead><tbody></tbody>`;
-    groups[year].forEach((rec, idx)=>{
-      const row = document.createElement('tr');
-      const summary = makeSummary(rec);
-      const actionsCell = document.createElement('td');
-      // view
-      const btnView = document.createElement('button'); btnView.className='btn btn-ghost'; btnView.textContent='View';
-      btnView.onclick = ()=> viewRecord(rec);
-      actionsCell.appendChild(btnView);
-      // export
-      const btnExport = document.createElement('button'); btnExport.className='btn btn-ghost'; btnExport.textContent='Export';
-      btnExport.onclick = ()=> downloadJSON(rec, `wheat_record_${rec.id}.json`);
-      actionsCell.appendChild(btnExport);
-      // delete
-      const btnDelete = document.createElement('button'); btnDelete.className='btn btn-ghost'; btnDelete.textContent='Delete';
-      btnDelete.onclick = ()=> {
-        if(!confirm('Delete this record?')) return;
-        if(showing==='drafts'){
-          const newDrafts = loadDrafts().filter(d => d.id !== rec.id); saveDrafts(newDrafts);
-        } else {
-          const newRecs = loadRecords().filter(r => r.id !== rec.id); saveRecords(newRecs);
-        }
-        refreshList();
-      };
-      actionsCell.appendChild(btnDelete);
-      // if draft, edit button
-   // Create edit button if showing drafts
-if (showing === 'drafts') {
-  const btnEdit = document.createElement('button');
-  btnEdit.className = 'btn btn-primary';
-  btnEdit.textContent = 'Edit';
-  btnEdit.onclick = () => {
-    editDraft(rec.id); 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  actionsCell.appendChild(btnEdit);
-}
-
-row.innerHTML = `<td>${idx+1}</td><td>${rec.acres||'—'}</td><td>${rec.notes||'—'}</td><td>${summary}</td>`;
-row.appendChild(actionsCell);
-table.querySelector('tbody').appendChild(row);
-
-    });
-    container.appendChild(table);
-  });
-}
-
-/* short summary of categories present */
-function makeSummary(rec){
-  const parts = [];
-  if(rec.landPrep && rec.landPrep.length) parts.push(`LandPrep(${rec.landPrep.length})`);
-  if(rec.seeds && rec.seeds.length) parts.push(`Seed(${rec.seeds.length})`);
-  if(rec.fertilizers && rec.fertilizers.length) parts.push(`Fertilizer(${rec.fertilizers.length})`);
-  if(rec.labour && rec.labour.length) parts.push(`Labour(${rec.labour.length})`);
-  if(rec.weedingChems && rec.weedingChems.length) parts.push(`WeedChem(${rec.weedingChems.length})`);
-  if(rec.boostingChems && rec.boostingChems.length) parts.push(`BoostChem(${rec.boostingChems.length})`);
-  return parts.join(' • ') || '—';
-}
-function editDraft(id) {
-  // Always get fresh drafts from localStorage
-  let drafts = JSON.parse(localStorage.getItem('drafts') || '[]');
-
-  // Find the one we want
-  let draft = drafts.find(d => d.id === id);
-  if (!draft) {
-    alert("Draft not found.");
-    return;
-  }
-
-  // Fill form fields
-  document.getElementById('acres').value = draft.acres || '';
-  document.getElementById('notes').value = draft.notes || '';
-  document.getElementById('summary').value = draft.summary || '';
-
-  // Store ID in a hidden input so "save" knows we are updating
-  document.getElementById('draftId').value = id;
-}
-
-/* view record (modal pretty view) */
-function viewRecord(rec) {
-  const modal = document.getElementById('recordModal');
-  const content = document.getElementById('modalContent');
-
-  const listItems = (arr, key) => (arr && arr.length)
-    ? arr.map(item => item[key] || '—').join(', ')
-    : '—';
-
-  content.innerHTML = `
-    <h2>🌾 Wheat Record — ${rec.year}</h2>
-    <p><strong>Acreage:</strong> ${rec.acres || '—'} acres</p>
-    <p><strong>Notes:</strong> ${rec.notes || '—'}</p>
-
-    <h3>Breakdown</h3>
-    <ul>
-      <li><strong>Land Preparation:</strong> ${listItems(rec.landPrep, 'desc')}</li>
-      <li><strong>Seeds:</strong> ${listItems(rec.seeds, 'type')}</li>
-      <li><strong>Fertilizers:</strong> ${listItems(rec.fertilizers, 'type')}</li>
-      <li><strong>Labour:</strong> ${listItems(rec.labour, 'desc')}</li>
-      <li><strong>Weeding Chemicals:</strong> ${listItems(rec.weedingChems, 'name')}</li>
-      <li><strong>Boosting Chemicals:</strong> ${listItems(rec.boostingChems, 'name')}</li>
-    </ul>
-
-    <h3>Harvest & Output</h3>
-    <p><strong>Harvest cost per acre:</strong> ${rec.harvestCost || 0}</p>
-    <p><strong>Bags yield per acre:</strong> ${rec.bagsPerAcre || 0}</p>
-    <p><strong>Price per bag:</strong> ${rec.pricePerBag || 0}</p>
-
-    ${rec.calculation ? `
-      <h3>Saved Calculation</h3>
-      <p><strong>Per Acre Cost:</strong> ${formatMoney(rec.calculation.perAcre)}</p>
-      <p><strong>Total Cost:</strong> ${formatMoney(rec.calculation.totalCost)}</p>
-      <p><strong>Revenue:</strong> ${formatMoney(rec.calculation.revenue)}</p>
-      <p><strong>Profit / Loss:</strong> ${formatMoney(rec.calculation.profit)}</p>
-    ` : ''}
+  const table = document.createElement("table");
+  table.className = "table";
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Acres</th>
+        <th>Notes</th>
+        <th>Summary</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
   `;
 
-  modal.style.display = 'flex';
+  const items = await getAllItems(showing);
+  items.forEach((rec, idx) => {
+    const row = document.createElement("tr");
+    const actionsCell = document.createElement("td");
+
+    // Edit Button
+    const btnEdit = document.createElement("button");
+    btnEdit.className = "btn btn-primary";
+    btnEdit.textContent = "Edit";
+    btnEdit.onclick = () => {
+      editRecord(showing, rec.id);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    actionsCell.appendChild(btnEdit);
+
+    // Delete Button
+    const btnDelete = document.createElement("button");
+    btnDelete.className = "btn btn-danger";
+    btnDelete.textContent = "Delete";
+    btnDelete.onclick = async () => {
+      await deleteItem(showing, rec.id);
+      loadTable(showing);
+    };
+    actionsCell.appendChild(btnDelete);
+
+    row.innerHTML = `
+      <td>${idx + 1}</td>
+      <td>${rec.acres || "—"}</td>
+      <td>${rec.notes || "—"}</td>
+      <td>${rec.summary || "—"}</td>
+    `;
+    row.appendChild(actionsCell);
+    table.querySelector("tbody").appendChild(row);
+  });
+
+  container.appendChild(table);
 }
 
-// Close button logic
-document.getElementById('closeModalBtn').onclick = () => {
-  document.getElementById('recordModal').style.display = 'none';
-};
-// Also close when clicking outside content
-document.getElementById('recordModal').onclick = (e) => {
-  if (e.target.id === 'recordModal') {
-    document.getElementById('recordModal').style.display = 'none';
+/* ==========================
+   Edit Record
+========================== */
+async function editRecord(storeName, id) {
+  const record = await getItem(storeName, id);
+  if (!record) {
+    alert("Record not found.");
+    return;
   }
-};
-
-/* ===============
-   Export / Import / Clear
-   =============== */
-document.getElementById('exportAll').onclick = ()=> {
-  const payload = { drafts: loadDrafts(), records: loadRecords(), exportedAt: new Date().toISOString() };
-  downloadJSON(payload, 'wheat_export_all.json');
-};
-
-document.getElementById('importBtn').onclick = ()=> document.getElementById('importFile').click();
-
-document.getElementById('importFile').onchange = async (e) => {
-  const f = e.target.files[0]; if(!f) return;
-  const reader = new FileReader();
-  reader.onload = async ()=> {
-    try {
-      const data = JSON.parse(reader.result);
-
-      // current caches
-      let drafts = loadDrafts();
-      let records = loadRecords();
-
-      // merge arrays if present
-      if(Array.isArray(data.drafts)) drafts = drafts.concat(data.drafts);
-      if(Array.isArray(data.records)) records = records.concat(data.records);
-
-      if(!data.drafts && !data.records){
-        if(Array.isArray(data)){
-          records = records.concat(data);
-        } else if(data.id){
-          if(data.status === 'final') records = records.concat([data]);
-          else drafts = drafts.concat([data]);
-        }
-      }
-
-      // de-dup by id
-      const byId = arr => Object.values(arr.reduce((m,x)=>{ m[x.id]=x; return m; },{}));
-      drafts = byId(drafts);
-      records = byId(records);
-
-      saveDrafts(drafts);
-      saveRecords(records);
-
-      alert('Import complete (merged offline).');
-      refreshList();
-    } catch(err){ alert('Invalid JSON'); }
-  };
-  reader.readAsText(f);
-};
-
-document.getElementById('clearAll').onclick = async ()=> {
-  if(!confirm('Clear ALL drafts and saved records stored offline?')) return;
-  await idbClear(STORE_DRAFTS);
-  await idbClear(STORE_RECORDS);
-  cacheDrafts = [];
-  cacheRecords = [];
-  refreshList();
-  alert('Cleared offline data.');
-};
-
-/* download helper */
-function downloadJSON(obj, filename){
-  const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  document.getElementById("recordId").value = id;
+  document.getElementById("acres").value = record.acres || "";
+  document.getElementById("notes").value = record.notes || "";
+  document.getElementById("calcResult").innerText = record.summary || "";
 }
 
-/* ===============
-   Init
-   =============== */
-document.getElementById('clearForm').onclick = ()=> { if(confirm('Clear current form?')) resetToBlank(); };
+/* ==========================
+   Login
+========================== */
+const encodedUser = btoa("john_doe"); // generic username variable
+const encodedPass = btoa("securepass2025");
 
-window.addEventListener('load', async ()=> {
-  // 1) open DB
-  await openDB();
-  // 2) hydrate caches from IndexedDB
-  cacheDrafts = await idbGetAll(STORE_DRAFTS);
-  cacheRecords = await idbGetAll(STORE_RECORDS);
-  // 3) one-time migration from any old localStorage data
-  await migrateFromLocalStorageIfNeeded();
+document.getElementById("loginForm")?.addEventListener("submit", async function (e) {
+  e.preventDefault();
+  const username = document.getElementById("username").value.trim().toLowerCase();
+  const password = document.getElementById("password").value.trim().toLowerCase();
+  const errorMessage = document.getElementById("error-message");
 
-  resetForm();
-  refreshList();
-  // set default year to current
-  refs.year.value = (new Date()).getFullYear();
+  if (btoa(username) === encodedUser && btoa(password) === encodedPass) {
+    sessionStorage.setItem("loggedIn", "true");
+    await initDB();
+    loadTable("drafts");
+    window.location.href = "main.html";
+  } else {
+    errorMessage.innerText = "Invalid credentials.";
+    setTimeout(() => (errorMessage.innerText = ""), 2000);
+  }
 });
-</script>
 
+/* ==========================
+   On Load
+========================== */
+document.addEventListener("DOMContentLoaded", async () => {
+  await initDB();
+  if (sessionStorage.getItem("loggedIn") === "true") {
+    loadTable("drafts");
+  }
+});
+
+</script>
 </body>
 </html>
