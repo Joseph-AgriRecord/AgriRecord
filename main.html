@@ -122,6 +122,7 @@ textarea:focus {
       <button id="addFert" class="btn btn-ghost">+ Add Fertilizer entry</button>
       <div class="small-muted">Fertilizer entries: type, cost per acre or per bag, rate</div>
     </div>
+<input type="hidden" id="draftId" value="">
 
     <!-- Labour -->
     <div class="section-title">Labour</div>
@@ -629,14 +630,22 @@ function refreshList(){
       };
       actionsCell.appendChild(btnDelete);
       // if draft, edit button
-      if(showing === 'drafts'){
-        const btnEdit = document.createElement('button'); btnEdit.className='btn btn-primary'; btnEdit.textContent='Edit';
-        btnEdit.onclick = ()=> { editDraft(rec.id); window.scrollTo({top:0, behavior:'smooth'}); };
-        actionsCell.appendChild(btnEdit);
-      }
-      row.innerHTML = `<td>${idx+1}</td><td>${rec.acres||'—'}</td><td>${rec.notes||'—'}</td><td>${summary}</td>`;
-      row.appendChild(actionsCell);
-      table.querySelector('tbody').appendChild(row);
+   // Create edit button if showing drafts
+if (showing === 'drafts') {
+  const btnEdit = document.createElement('button');
+  btnEdit.className = 'btn btn-primary';
+  btnEdit.textContent = 'Edit';
+  btnEdit.onclick = () => {
+    editDraft(rec.id); 
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+  actionsCell.appendChild(btnEdit);
+}
+
+row.innerHTML = `<td>${idx+1}</td><td>${rec.acres||'—'}</td><td>${rec.notes||'—'}</td><td>${summary}</td>`;
+row.appendChild(actionsCell);
+table.querySelector('tbody').appendChild(row);
+
     });
     container.appendChild(table);
   });
@@ -652,6 +661,25 @@ function makeSummary(rec){
   if(rec.weedingChems && rec.weedingChems.length) parts.push(`WeedChem(${rec.weedingChems.length})`);
   if(rec.boostingChems && rec.boostingChems.length) parts.push(`BoostChem(${rec.boostingChems.length})`);
   return parts.join(' • ') || '—';
+}
+function editDraft(id) {
+  // Always get fresh drafts from localStorage
+  let drafts = JSON.parse(localStorage.getItem('drafts') || '[]');
+
+  // Find the one we want
+  let draft = drafts.find(d => d.id === id);
+  if (!draft) {
+    alert("Draft not found.");
+    return;
+  }
+
+  // Fill form fields
+  document.getElementById('acres').value = draft.acres || '';
+  document.getElementById('notes').value = draft.notes || '';
+  document.getElementById('summary').value = draft.summary || '';
+
+  // Store ID in a hidden input so "save" knows we are updating
+  document.getElementById('draftId').value = id;
 }
 
 /* view record (modal pretty view) */
