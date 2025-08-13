@@ -20,7 +20,7 @@
     width:100%;padding:14px;border-radius:8px;border:1px solid #e6e9ef;margin-top:8px;
     box-sizing:border-box;font-size:17px;background:#fff
   }
-  .section-title{font-weight:700;border: 2px solid #ddd;margin: 20px 0;margin-top:6px;margin-bottom:6px}
+  .section-title{font-weight:700;border: 1.5px solid black;margin: 10px 0;margin-top:6px;margin-bottom:6px}
   .btn{display:inline-flex;gap:8px;align-items:center;padding:12px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
   .btn-primary{background:var(--accent);color:#fff}
   .btn-ghost{background:transparent;border:1px solid #e6e9ef}
@@ -79,14 +79,16 @@
     <!-- Land preparation -->
     <div class="section-title">Land preparation <span class="small-muted">— add multiple items</span></div>
     <div id="landPrepList"></div>
-    <div style="margin-top:6px">
+    <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addLandPrep" class="btn btn-ghost">+ Add Land preparation item</button>
     </div>
 
     <!-- Seed -->
     <div class="section-title">Seed</div>
     <div id="seedList"></div>
-    <div style="margin-top:6px">
+    <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addSeed" class="btn btn-ghost">+ Add Seed entry</button>
       <div class="small-muted">Seed entries: seed type, price per bag, bags per acre (rate)</div>
     </div>
@@ -94,7 +96,8 @@
     <!-- Fertilizer -->
     <div class="section-title">Fertilizer</div>
     <div id="fertList"></div>
-    <div style="margin-top:6px">
+   <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addFert" class="btn btn-ghost">+ Add Fertilizer entry</button>
       <div class="small-muted">Fertilizer entries: type, cost per acre or per bag, rate</div>
     </div>
@@ -102,7 +105,8 @@
     <!-- Labour -->
     <div class="section-title">Labour</div>
     <div id="labourList"></div>
-    <div style="margin-top:6px">
+    <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addLabour" class="btn btn-ghost">+ Add Labour item</button>
       <div class="small-muted">e.g., planting labour cost per acre, weeding labour per acre, etc.</div>
     </div>
@@ -110,7 +114,8 @@
     <!-- Weeding chemicals -->
     <div class="section-title">Weeding Chemicals</div>
     <div id="weedingList"></div>
-    <div style="margin-top:6px">
+   <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addWeed" class="btn btn-ghost">+ Add Weeding Chemical</button>
       <div class="small-muted">Each chemical has name, price and labour cost per acre</div>
     </div>
@@ -118,7 +123,8 @@
     <!-- Boosting chemicals -->
     <div class="section-title">Boosting Chemicals</div>
     <div id="boostList"></div>
-    <div style="margin-top:6px">
+   <div style="margin-top:6px; border: 1px solid #000; margin: 20px 0;">
+
       <button id="addBoost" class="btn btn-ghost">+ Add Boosting Chemical</button>
       <div class="small-muted">Growth boosters or foliar sprays</div>
     </div>
