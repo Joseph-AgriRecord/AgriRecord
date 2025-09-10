@@ -802,58 +802,8 @@ document.getElementById('importFile').onchange = async (e) => {
   };
   reader.readAsText(f);
 };
-// Self-contained function to show the paywall overlay
-function showPayOverlay() {
-    // Create overlay div
-    const overlay = document.createElement("div");
 
-    // Style overlay to cover the entire viewport
-    Object.assign(overlay.style, {
-        position: "fixed",
-        top: "0",
-        left: "0",
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "#000000", // solid black
-        color: "white",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        fontSize: "2rem",
-        zIndex: "9999",
-        textAlign: "center",
-        flexDirection: "column",
-        padding: "20px",
-    });
 
-    // Set initial message
-    overlay.textContent = "Hello! Kindly complete the payment of Ksh 5,000 to continue using this application. Thank you!";
-
-    // Add overlay to the body
-    document.body.appendChild(overlay);
-
-    // Flashing effect: toggle message opacity every second
-    let visible = true;
-    const flashInterval = setInterval(() => {
-        overlay.style.opacity = visible ? "1" : "0.7"; // dim slightly
-        visible = !visible;
-    }, 1000);
-
-    // Prevent clicking through
-    overlay.addEventListener("click", (e) => e.stopPropagation());
-
-    // Return a remove function
-    return function removeOverlay() {
-        clearInterval(flashInterval);
-        document.body.removeChild(overlay);
-    };
-}
-
-// Usage:
-const removePayOverlay = showPayOverlay();
-
-// Later, to remove the overlay:
-// removePayOverlay();
 document.getElementById('clearAll').onclick = async ()=> {
   if(!confirm('Clear ALL drafts and saved records stored offline?')) return;
   await idbClear(STORE_DRAFTS);
